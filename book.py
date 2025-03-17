@@ -1,9 +1,9 @@
 # Required libraries import
-import streamlit as st             # Streamlit for UI
+import streamlit as st             # type: ignore # Streamlit for UI
 import sqlite3                    # SQLite for local database
-import pandas as pd               # Pandas for data handling
-import requests                   # For API requests (book recommendations)
-import plotly.graph_objs as go    # Plotly for interactive charts
+import pandas as pd               # type: ignore # Pandas for data handling
+import requests                   # type: ignore # For API requests (book recommendations)
+import plotly.graph_objs as go    # type: ignore # Plotly for interactive charts
 
 # -------------------------------------------
 # Database setup and connection
