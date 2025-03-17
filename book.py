@@ -1,138 +1,232 @@
-import streamlit as st
-import json
-import os
+# Required libraries import
+import streamlit as st             # Streamlit for UI
+import sqlite3                    # SQLite for local database
+import pandas as pd               # Pandas for data handling
+import requests                   # For API requests (book recommendations)
+import plotly.graph_objs as go    # Plotly for interactive charts
 
-# File to store library data
-LIBRARY_FILE = "library.txt"
+# -------------------------------------------
+# Database setup and connection
+conn = sqlite3.connect("library.db", check_same_thread=False)  # Create or connect to SQLite database
+cursor = conn.cursor()                                         # Create cursor for executing queries
 
-# Initialize the library
-if os.path.exists(LIBRARY_FILE):
-    with open(LIBRARY_FILE, "r") as file:
-        library = json.load(file)
-else:
-    library = []
+# Create table if it does not exist already
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,   -- Unique ID for each book
+        title TEXT NOT NULL,                    -- Book title
+        author TEXT NOT NULL,                   -- Book author
+        year INTEGER,                           -- Publication year
+        genre TEXT,                             -- Book genre
+        read_status BOOLEAN                     -- Read status (True/False)
+    )
+''')
+conn.commit()  # Save the table creation
 
-# Function to save the library to a file
-def save_library():
-    with open(LIBRARY_FILE, "w") as file:
-        json.dump(library, file)
-
-# Function to add a book
+# -------------------------------------------
+# Function to add a book to database
 def add_book(title, author, year, genre, read_status):
-    book = {
-        "title": title,
-        "author": author,
-        "year": year,
-        "genre": genre,
-        "read_status": read_status
-    }
-    library.append(book)
-    save_library()
-    st.success("Book added successfully!")
+    cursor.execute('''
+        INSERT INTO books (title, author, year, genre, read_status)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (title, author, year, genre, read_status))
+    conn.commit()  # Save new book
+    st.success("✅ Book added successfully!")
 
-# Function to remove a book
+# Function to remove a book by title
 def remove_book(title):
-    global library
-    library = [book for book in library if book["title"].lower() != title.lower()]
-    save_library()
-    st.success("Book removed successfully!")
+    cursor.execute('DELETE FROM books WHERE LOWER(title) = LOWER(?)', (title,))
+    conn.commit()  # Save changes
+    st.success("🗑️ Book removed successfully!")
 
-# Function to search for a book
+# Function to search for books
 def search_books(query, search_by):
-    results = []
-    for book in library:
-        if search_by == "title" and query.lower() in book["title"].lower():
-            results.append(book)
-        elif search_by == "author" and query.lower() in book["author"].lower():
-            results.append(book)
-    return results
-
-# Function to display all books
-def display_books():
-    if not library:
-        st.write("Your library is empty.")
+    if search_by == "title":
+        cursor.execute("SELECT * FROM books WHERE LOWER(title) LIKE ?", ('%' + query.lower() + '%',))
     else:
-        for i, book in enumerate(library, 1):
-            read_status = "Read" if book["read_status"] else "Unread"
-            st.write(f"{i}. **{book['title']}** by {book['author']} ({book['year']}) - {book['genre']} - {read_status}")
+        cursor.execute("SELECT * FROM books WHERE LOWER(author) LIKE ?", ('%' + query.lower() + '%',))
+    return cursor.fetchall()  # Return matching books
 
-# Function to display statistics
+# Function to fetch all books from database
+def fetch_all_books():
+    cursor.execute("SELECT * FROM books")
+    return cursor.fetchall()
+
+# Function to display basic statistics
 def display_statistics():
-    total_books = len(library)
-    read_books = sum(book["read_status"] for book in library)
-    percentage_read = (read_books / total_books * 100) if total_books > 0 else 0
-    st.write(f"Total books: {total_books}")
-    st.write(f"Percentage read: {percentage_read:.1f}%")
+    cursor.execute("SELECT COUNT(*) FROM books")
+    total = cursor.fetchone()[0]  # Total books
+    cursor.execute("SELECT COUNT(*) FROM books WHERE read_status = 1")
+    read = cursor.fetchone()[0]   # Read books
+    percent = (read / total * 100) if total > 0 else 0  # Read percentage
+    st.metric("Total Books", total)
+    st.metric("Read Percentage", f"{percent:.1f}%")
 
-# Streamlit UI
-st.title("💥 Personal Library Manager 📚")
+# Function to export books in CSV or Excel format
+def export_books(format):
+    books = fetch_all_books()
+    df = pd.DataFrame(books, columns=["ID", "Title", "Author", "Year", "Genre", "Read"])
+    if format == "CSV":
+        csv = df.to_csv(index=False).encode("utf-8")  # Convert to CSV
+        st.download_button("⬇️ Download CSV", csv, file_name="library.csv", mime="text/csv")
+    elif format == "Excel":
+        excel = df.to_excel(index=False, engine='openpyxl')  # Convert to Excel
+        st.download_button("⬇️ Download Excel", excel, file_name="library.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# Custom CSS for background color
+# -------------------------------------------
+# Streamlit Page Setup
+st.set_page_config(page_title="📚 Personal Library Manager", layout="wide")  # Set page title and layout
+
+# Custom CSS for dark mode
 st.markdown("""
     <style>
-    .main {
-        background-color: #333333;
+    body {
+        background-color: #1e1e1e;
+        color: #f0f0f0;
+    }
+    .stApp {
+        background-color: #1e1e1e;
+        color: #f0f0f0;
+    }
+    .stTextInput>div>div>input,
+    .stNumberInput>div>div>input,
+    .stSelectbox>div>div>div {
+        background-color: #333;
         color: white;
     }
-    .stSidebar {
-        background-color: #333333;
-    }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# Menu options
+# Title of the app
+st.title("📚 Personal Library Manager 📖")
+
+# Sidebar menu
 menu = st.sidebar.selectbox(
-    "Menu",
-    ["Add a Book", "Remove a Book", "Search for a Book", "Display All Books", "Display Statistics"]
+    "📌 Menu",
+    ["Add a Book", "Remove a Book", "Search", "Library Overview", "Statistics", "Export", "Book Recommendations"]
 )
 
+# -------------------------------------------
+# Menu: Add Book
 if menu == "Add a Book":
-    st.header("📖 Add a Book 🎉")
-    title = st.text_input("Title")
-    author = st.text_input("Author")
-    year = st.number_input("Publication Year", min_value=1800, max_value=2100, step=1)
-    genre = st.text_input("Genre")
-    read_status = st.checkbox("Have you read this book?")
-    if st.button("Add Book"):
-        if title and author and year and genre:
+    st.header("➕ Add a New Book")
+    col1, col2 = st.columns(2)  # Split UI in two columns
+    with col1:
+        title = st.text_input("📖 Book Title")
+        author = st.text_input("✍️ Author")
+        genre = st.text_input(" 📁 Genre")
+    with col2:
+        year = st.number_input("📅 Year", min_value=1800, max_value=2100, value=2024)
+        read_status = st.checkbox(" ✅ Mark as Read")
+
+    if st.button(" ➕ Add Book"):
+        if title and author and genre:
             add_book(title, author, year, genre, read_status)
         else:
-            st.error("Please fill in all fields.")
+            st.error("⚠️ Please fill in all fields.")
 
+# Menu: Remove Book
 elif menu == "Remove a Book":
-    st.header("Remove a Book")
+    st.header("🗑️ Remove Book")
     title = st.text_input("Enter the title of the book to remove")
     if st.button("Remove Book"):
         if title:
             remove_book(title)
         else:
-            st.error("Please enter a title.")
+            st.error("⚠️ Please enter a title.")
 
-elif menu == "Search for a Book":
-    st.header("Search for a Book")
+# Menu: Search Book
+elif menu == "Search":
+    st.header("🔍 Search for Books")
     search_by = st.radio("Search by", ["Title", "Author"])
-    query = st.text_input(f"Enter the {search_by.lower()}")
+    query = st.text_input(f"Enter {search_by}")
     if st.button("Search"):
         if query:
             results = search_books(query, search_by.lower())
             if results:
-                st.write("Matching Books:")
+                st.write("### 🔎 Results")
                 for i, book in enumerate(results, 1):
-                    read_status = "Read" if book["read_status"] else "Unread"
-                    st.write(f"{i}. **{book['title']}** by {book['author']} ({book['year']}) - {book['genre']} - {read_status}")
+                    status = "✅ Read" if book[5] else "📖 Unread"
+                    st.write(f"{i}. **{book[1]}** by *{book[2]}* ({book[3]}) - {book[4]} - {status}")
             else:
-                st.write("No matching books found.")
+                st.warning("No matching books found.")
         else:
-            st.error("Please enter a search term.")
+            st.error("⚠️ Enter a search query.")
 
-elif menu == "Display All Books":
-    st.header("Your Library")
-    display_books()
+# Menu: Show All Books with Sorting/Filtering
+elif menu == "Library Overview":
+    st.header("📖 Full Library")
+    all_books = fetch_all_books()
 
-elif menu == "Display Statistics":
-    st.header("Library Statistics")
+    if not all_books:
+        st.info("Library is empty.")
+    else:
+        df = pd.DataFrame(all_books, columns=["ID", "Title", "Author", "Year", "Genre", "Read"])
+        read_filter = st.selectbox("📌 Filter by Read Status", ["All", "Read", "Unread"])
+        sort_by = st.selectbox("↕️ Sort by", ["Title", "Author", "Year"])
+
+        # Apply filtering
+        if read_filter == "Read":
+            df = df[df["Read"] == 1]
+        elif read_filter == "Unread":
+            df = df[df["Read"] == 0]
+
+        # Apply sorting
+        df = df.sort_values(by=sort_by)
+        st.dataframe(df.drop("ID", axis=1), use_container_width=True)
+
+# Menu: Show Statistics with Charts
+elif menu == "Statistics":
+    st.header("📊 Library Stats & Progress")
+
+    all_books = fetch_all_books()
+    df = pd.DataFrame(all_books, columns=["ID", "Title", "Author", "Year", "Genre", "Read"])
+
+    # Pie Chart for read/unread books
+    st.subheader("📈 Reading Progress")
+    read = df["Read"].sum()
+    unread = len(df) - read
+    pie_data = go.Figure(data=[go.Pie(labels=["Read", "Unread"], values=[read, unread], hole=.4)])
+    st.plotly_chart(pie_data)
+
+    # Bar Chart for genre-wise distribution
+    st.subheader("📚 Genre-wise Distribution")
+    genre_df = df.groupby("Genre").size().reset_index(name="Count")
+    if not genre_df.empty:
+        st.bar_chart(genre_df.set_index("Genre"))
+
+    # Show total stats
     display_statistics()
+
+# Menu: Export
+elif menu == "Export":
+    st.header("⬇️ Export Your Library")
+    export_format = st.selectbox("Choose Format", ["CSV", "Excel"])
+    export_books(export_format)
+
+# Menu: Book Recommendations via OpenLibrary API
+elif menu == "Book Recommendations":
+    st.header("📚 Book Recommendations")
+
+    genre = st.selectbox("Choose a genre", ["fiction", "fantasy", "mystery", "history", "romance", "science"])
+
+    if st.button("Get Recommendations"):
+        with st.spinner("Fetching book recommendations..."):
+            try:
+                response = requests.get(f"https://openlibrary.org/subjects/{genre}.json?limit=5")
+                data = response.json()
+
+                if 'works' in data:
+                    st.success(f"📚 Top Books in {genre.title()}:")
+                    for book in data['works']:
+                        title = book['title']
+                        authors = ", ".join([a['name'] for a in book.get('authors', [])])
+                        st.markdown(f"📖 **{title}** by *{authors}*")
+                else:
+                    st.warning("No books found.")
+            except Exception as e:
+                st.error("❌ Failed to fetch recommendations.")
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.write("Made by ❤️ Sadia Imran")
+st.sidebar.caption("Made with ❤️ by Sadia Imran")
