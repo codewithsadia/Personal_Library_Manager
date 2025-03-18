@@ -33,5 +33,19 @@
         "year": "2024",
         "genre": "way of life",
         "read_status": false
+    },
+    {
+        "title": "wisdom",
+        "author": "sadia",
+        "year": 2024,
+        "genre": "way of life",
+        "read_status": true
+    },
+    {
+        "title": "wisdom",
+        "author": "sadia",
+        "year": 2024,
+        "genre": "way of life",
+        "read_status": true
     }
 ]
