@@ -1,2 +1,0 @@
-
-[{"title": "Atomic Habits", "author": "James Clear", "year": 2018, "genre": "Self-help, Personal Development", "read_status": true}]

@@ -1,0 +1,37 @@
+[
+    {
+        "title": "wisdom",
+        "author": "sadia",
+        "year": 2025,
+        "genre": "knowledge",
+        "read_status": true
+    },
+    {
+        "title": "learn python",
+        "author": "sadia",
+        "year": 2025,
+        "genre": "coding",
+        "read_status": true
+    },
+    {
+        "title": "learn nextjs",
+        "author": "sadia",
+        "year": 2025,
+        "genre": "coding",
+        "read_status": false
+    },
+    {
+        "title": "The month of ramazan",
+        "author": "sadia",
+        "year": "2025",
+        "genre": "relligion",
+        "read_status": true
+    },
+    {
+        "title": "wisdom",
+        "author": "imran",
+        "year": "2024",
+        "genre": "way of life",
+        "read_status": false
+    }
+]
